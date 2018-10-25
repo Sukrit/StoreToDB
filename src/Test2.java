@@ -27,6 +27,7 @@ import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
 import com.gargoylesoftware.htmlunit.html.HtmlBold;
 import com.gargoylesoftware.htmlunit.html.HtmlElement;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
+import com.gargoylesoftware.htmlunit.html.HtmlStrong;
 
 public class Test2 {
 	private static final String SAMPLE_CSV_FILE_PATH = "C:\\\\Users\\\\Sukrit\\\\Desktop\\\\Railways\\\\Govt data\\\\Train_details_22122017.csv";
@@ -73,13 +74,14 @@ public class Test2 {
 				 * csvRecord.get(10); String destinationStationName = csvRecord.get(11);
 				 */
 
-				String sql = "SELECT CODE FROM STATION;";
+				String sql = "SELECT * FROM STATION where platforms = 0;";
 				pstm = (PreparedStatement) con.prepareStatement(sql);
 				ResultSet rs = pstm.executeQuery();
 				con.commit();
 				 while(rs.next())
 				{
 					 String code = rs.getString("Code");
+					 int platforms = rs.getInt("Platforms");
 					// Code for updating route table
 					/*
 					 * if(seq==1) { prev = stationCode; prevDistance = 0; continue;
@@ -128,19 +130,12 @@ public class Test2 {
 					 * 
 					 * }
 					 */
-
-					int platforms = getPlatforms(code);
-					if (platforms != 0) {
-
-						sql = "UPDATE STATION SET PLATFORMS = '" + platforms + "' where CODE = '" + code + "'";
-						System.out.println(sql);
-						 pstm = (PreparedStatement) con.prepareStatement(sql);
-						 pstm.execute();
-						 con.commit();
-						// System.out.println(days);
-
-					}
-
+					 
+					 
+					ThreadClass obj = new ThreadClass(code, platforms, con, pstm);
+					new Thread(obj).start();
+					System.out.println("Loop number "+code);
+					Thread.sleep(1000);
 				}
 
 				// Code for updating route table
@@ -162,6 +157,62 @@ public class Test2 {
 		} catch (IOException e) {
 		}
 
+	}
+
+	private static int getPlatformsMethod2(String code) {
+		WebClient client = new WebClient();
+		client.getOptions().setCssEnabled(false);
+		client.getOptions().setJavaScriptEnabled(false);
+		try {
+		String a = code.substring(0, 1);
+		String url = "http://www.alltraintimes.com/list-of-railway-stations-by-"+a+".html";
+		HtmlPage page = client.getPage(url);
+		
+		HtmlElement item = (HtmlElement) page
+				.getFirstByXPath(".//div[@class='list_table text-left']");
+		//System.out.println(item.asXml());
+		List<HtmlElement> divs = (List<HtmlElement>) item.getByXPath(".//div[@class='col-xs-12 col-sm-6 ']");
+		String newLink  = null;
+		for(HtmlElement div:divs) {
+			//System.out.println(div.asXml());
+			
+			if(!div.asText().isEmpty() && div.asText().contains(code)) {
+				//System.out.println(div.asXml());
+				List<HtmlAnchor> links = ((List<HtmlAnchor>) div.getByXPath(".//a"));
+				for(HtmlAnchor link: links) {
+					newLink = link.getAttribute("href");
+					System.out.println("new link is"+newLink);
+					break;
+				}
+			}
+			
+		}
+		
+		if(newLink!=null) {
+			page = client.getPage(newLink);
+			
+			List<HtmlElement> blocks = (List<HtmlElement>) page
+					.getByXPath(".//div[@class='col-xs-12 col-sm-6']");
+			
+			for(HtmlElement block: blocks) {
+				HtmlElement para = (HtmlElement) block.getFirstByXPath(".//p");
+				if(para!=null) {
+					
+					String text = para.asText();
+					String sub = text.substring(text.indexOf("Total Platform:"));
+					String platform = (sub.substring(sub.indexOf(":")+1)).trim();
+					
+					return Integer.parseInt(platform);
+				}
+			}
+			
+		
+		}
+		}catch(Exception e) {
+			e.printStackTrace();
+		}
+		return 0;
+		
 	}
 
 	private static int getPlatforms(String code) {
